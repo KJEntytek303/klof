@@ -5,6 +5,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
+#include "dynamic_array.h"
 
 #define KJEntytekLofGetArraySize( x ) ((KjentytekLofArrayHeader*)(void*)( x )-1)->size
 #define KJEntytekLofGetArrayAlloc( x ) ((KjentytekLofArrayHeader*)(void*)( x )-1)->allocated
@@ -43,24 +44,16 @@ typedef struct {
 	char type;
 } KjentytekLofDataObject;
 
-typedef struct KjentytekLofArrayHeader { 
-	size_t size;
-	size_t allocated;
-} KjentytekLofArrayHeader; 
-
 typedef struct {
-	size_t size;
-	size_t allocated;
-	KjentytekLofDataObject* members;
-} KjentytekLofStruct;
+	KjentytekLofDataObject object;
+	char* key;
+} KjentytekLofStructEntry //extends KjentytekLofDataObject
 
 /* }}} */
 
 extern bool kjentytek_lof_zero_out_memory;
 
 //Malloc and free klofs {{{
-extern KjentytekLofStruct* kjentytekLofStructNew(size_t initial_capacity);
-extern KjentytekLofDataObject* kjentytekLofArrayNew(size_t initial_capacity); //done
 extern void kjentytekLofFreeStruct(KjentytekLofStruct** klof);
 extern void kjentytekLofFreeArray(KjentytekLofDataObject** klof); //done
 extern void kjentytekLofFreeScalar(KjentytekLofDataObject* klof); //done
@@ -78,8 +71,8 @@ extern KjentytekLofDataObject kjentytekLofFromString(const char* str);
 //add, remove and set elements into Klofs {{{
 extern int kjentytekLofSetIntoStruct( KjentytekLofStruct** klof, const char* key, KjentytekLofDataObject data );
 extern KjentytekLofDataObject kjentytekLofGetFromStruct( const KjentytekLofStruct* klof, const char* key );
+extern void kjentytekLofRemoveFromStruct( KjentytekLofStruct** klof, const char* key);
 
-extern int kjentytekLofAddIntoArray( KjentytekLofDataObject** array, const size_t index, KjentytekLofDataObject elem);
 extern void kjentytekLofRemoveFromArray( KjentytekLofDataObject* array, const size_t index );
 /* }}} */
 
@@ -108,12 +101,6 @@ extern int kjentytekLofResizeArray( KjentytekLofDataObject** array, const size_t
 #ifdef KJENTYTEK_LOF_IMPLEMENTATION
 #undef KJENTYTEK_LOF_IMPLEMENTATION
 
-KjentytekLofDataObject* kjentytekLofArrayNew(size_t initial_capacity) {
-	KjentytekLofArrayHeader* ret = malloc( initial_capacity * sizeof(KjentytekLofDataObject) + sizeof( *ret) );
-	ret->size=0;
-	ret->allocated=initial_capacity;
-	return (KjentytekLofDataObject*) (void*) (ret+1);
-}
 
 void kjentytekLofFreeScalar(KjentytekLofDataObject* klof) {/* {{{ */
 	switch ( (int) klof->type ) {
@@ -145,29 +132,14 @@ void kjentytekLofFreeArray( KjentytekLofDataObject** arr ) {/* {{{ */
 	*arr = NULL;
 }/* }}} */
 
-int kjentytekLofAddIntoArray( KjentytekLofDataObject** array, const size_t index, KjentytekLofDataObject elem) {/* {{{ */
-	if( KJEntytekLofGetArrayAlloc(*array) < KJEntytekLofGetArraySize(*array) +1 ) {
-
-		size_t new_size = KJEntytekLofGetArrayAlloc( *array ) + KJEntytekLofGetArrayAlloc( *array ) / 2 + 1;
-		void* tmp_ptr = realloc( *array, new_size);
-
-		if( tmp_ptr == NULL ) {
-			return 0;
-		}
-
-		*array = tmp_ptr;
-		KJEntytekLofGetArrayAlloc(*array) = new_size;
-	}
-
-	memmove( array + index+1, array + index, KJEntytekLofGetArraySize(*array) - index);
-	(*array)[index] = elem;
-	KJEntytekLofGetArraySize( *array )++;
-	return 1;
-}/* }}} */
-
 void kjentytekLofRemoveFromArray( KjentytekLofDataObject* array, const size_t index ) {
 	kjentytekLofFreeScalar( array + index );
 	memmove(array + index, array + index + 1, KJEntytekLofGetArraySize(array) - index -1);
+}
+
+void kjentytekLofInsertIntoStruct( KjentytekLofStructEntry** hash_map, const char* key, KjentytekLofDataObject
+void kjentytekLofRemoveFromStruct( KjentytekLofStructEntry* hash_map, const char* key ) {
+
 }
 
 
