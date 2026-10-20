@@ -2,6 +2,7 @@ package net.kjentytek303.klof;
 
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
+import java.io.IOException;
 import java.io.Serializable;
 
 import java.lang.Cloneable;
@@ -9,10 +10,12 @@ import java.lang.String;
 import java.lang.SuppressWarnings;
 
 import java.util.ArrayList;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import net.kjentytek303.klof.KlofSettings;
 
 public class AbstractKlofObject implements Cloneable {
 	public static final int NULL = 0;
@@ -24,6 +27,10 @@ public class AbstractKlofObject implements Cloneable {
 	public static final int INT = 0x12;
 	public static final int DOUBLE = 0x1a;
 	public static final int BOOLEAN = 0x0f;
+
+	public static final int ERR_GENERAL_ERROR = 1;
+	public static final int ERR_TRUNCATION = 2;
+	public static final int ERR_ENFORCEMENT_MISMATCH = 3;
 
 	//Remember, there's effectively no difference between a java Object reference, and a C void pointer
 	protected Object holder = null;
@@ -143,6 +150,107 @@ public class AbstractKlofObject implements Cloneable {
 //	public void writeStream( BufferedWriter ostream, /*Nullable*/ KlofSettings settings );
 //	public void readStream ( BufferedReader istream, /*Nullable*/ KlofSettings settings );
 
+//	public void readDKlofStream( BufferedReader istream, /*Nullable*/ KlofSettings settings ) {
+//	}
+
+	public int writeDKlofStream( BufferedWriter ostream ) throws IOException {
+		return writeDKlofStream( ostream, null, "" );
+	}
+	public int writeDKlofStream( BufferedWriter ostream, /*Nullable*/ KlofSettings settings ) throws IOException {
+		return writeDKlofStream( ostream, settings, "");
+	}
+
+//	@SuppressWarnings("unchecked")
+	public int writeDKlofStream( BufferedWriter ostream, /*Nullable*/ KlofSettings settings, String path ) throws IOException {
+		if(settings != null) {
+			settings = new KlofSettings();
+		}
+
+		AtomicInteger errors;
+		int errors_arr = 0;
+
+		switch (this.type) {
+			case NULL:
+				if( settings.strict_types ) {
+					ostream.write(path + "=null");
+					ostream.newLine();
+					return 0;
+				} else {
+					ostream.write(path + "=");
+					ostream.newLine();
+					return ERR_TRUNCATION;
+				}
+
+			case SCALAR:
+				String str = (String) holder;
+				str = str.replace("\n", "\\n");
+
+				if( settings.strict_types ) {
+					str = "\"" + str;
+				} else if( shouldBackslashValueDklof(str) ) {
+					str = "\\" + str;
+				}
+				ostream.write(path + "=" + str);
+				ostream.newLine();
+				return 0;
+				
+			case ARRAY:
+				List<AbstractKlofObject> arr = (List<AbstractKlofObject>) holder;
+				for( var elem : arr ) {
+					errors_arr += elem.writeDKlofStream(ostream, settings, path + "[+");
+				}
+				return (errors_arr > 0) ? ERR_GENERAL_ERROR : 0;
+				
+			case STRUCT:
+				errors = new AtomicInteger(0);
+				final KlofSettings settings_cp = settings;
+				Map<String, AbstractKlofObject> struct = (Map<String, AbstractKlofObject>) holder;
+
+				struct.forEach( (key, elem) -> {
+					try {
+						int ret = elem.writeDKlofStream(ostream, settings_cp, path.equals("") ? key : "{" + key);
+						errors.addAndGet(ret);
+					} catch(IOException e) {
+						errors.set(-1);
+					}
+				});
+				if( errors.get() == -1 ) {
+					throw new IOException();
+				}
+
+				return (errors.get() > 0) ? ERR_GENERAL_ERROR : 0;
+
+			case UNDEFINED:
+				return 0;
+
+			case INT:
+				Integer in = (Integer) holder;
+				ostream.write(path + "=" + in.intValue());
+				ostream.newLine();
+
+				return settings.strict_types ? 0 : ERR_ENFORCEMENT_MISMATCH;
+
+			case DOUBLE:
+				Double db = (Double) holder;
+				ostream.write(path + "=" + db.doubleValue());
+				ostream.newLine();
+
+				return settings.strict_types ? 0 : ERR_ENFORCEMENT_MISMATCH;
+			case BOOLEAN:
+				Boolean bool = (Boolean) holder;
+				if( settings.strict_types ) {
+					ostream.write(path + "=" + bool.booleanValue());
+					ostream.newLine();
+					return 0;
+				}
+
+				ostream.write(path + "=" + (bool.booleanValue() ? "1" : "0"));
+				ostream.newLine();
+				return ERR_TRUNCATION;
+		}
+		return ERR_GENERAL_ERROR;
+	}
+
 	/*
 	@Override
 	public String toString() {
@@ -158,6 +266,8 @@ public class AbstractKlofObject implements Cloneable {
 	public String toKlofString() {
 		return null;
 	}*/
-
+	public static boolean shouldBackslashValueDklof(String str) {
+		return str.charAt(0) == '\\' || str.charAt(0) == '[' || str.charAt(0) == '{' || str.charAt(0) == '\"';
+	}
 
 }
